@@ -4,7 +4,6 @@ Every question from UPSC Engineering Services (Preliminary) Paper I, General Stu
 
 - Practice subject-wise or paper-wise, or take random timed tests
 - Every option and statement explained
-- **PYQ Notes**: topic-wise notes for all 10 syllabus subjects, built from every question asked, downloadable as PDF
 - **Analysis**: how often each broad subtopic is asked, with rising and falling trends and recent years
 - Bookmarks, progress tracking and night mode; works on phones
 - Progress is saved in your browser; use **My data** to back it up or restore it

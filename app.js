@@ -3,8 +3,6 @@
 
   var SUBJECTS = window.PYQ_SUBJECTS;
   var PAPERS = window.PYQ_PAPERS;
-  var NOTES = window.PYQ_NOTES || {};
-  var BOOKS = window.PYQ_BOOKS || {};
   var LETTERS = ["A", "B", "C", "D"];
   var STORE_KEY = "esepyq-attempts-v1";
   var app = document.getElementById("app");
@@ -685,11 +683,10 @@
 
   // ---------- PYQ analysis: broad subtopics (book units) ranked by how often UPSC asks them ----------
   var UNIT_OF = window.PYQ_UNIT_OF || {};
-  var UNITS = {};            // unit id -> { subject, title, topics: [titles], firstTopic }
+  var UNITS = {};            // unit id -> { subject, title, topics: [subtopic names] }
   SUBJECTS.forEach(function (s) {
-    if (!BOOKS[s.id]) return;
-    BOOKS[s.id].units.forEach(function (u) {
-      UNITS[u.id] = { id: u.id, subject: s.id, title: u.title, topics: u.topics.map(function (t) { return t.title; }), firstTopic: u.topics[0] && u.topics[0].id };
+    ((window.PYQ_UNITS || {})[s.id] || []).forEach(function (u) {
+      UNITS[u[0]] = { id: u[0], subject: s.id, title: u[1], topics: u[2] };
     });
   });
   var MIN_YEAR = 2017, MAX_YEAR = 2026, RECENT_FROM = 2022, SPLIT_YEAR = 2022;
@@ -797,8 +794,7 @@
         var practise = "#/unit/" + u.id + (recent ? "@" + RECENT_FROM : "") + "/0";
         var n = recent ? r.recent : r.total;
         var name = (n ? '<a class="an-unit" href="' + practise + '" title="Practise these ' + qs(n) + '">' + hl(u.title, q) + '</a>' : '<span class="an-unit none">' + hl(u.title, q) + '</span>') +
-          (x.via ? '<small class="an-via">includes ' + x.via.map(function (t) { return hl(t, q); }).join("; ") + '</small>' : "") +
-          (u.firstTopic ? ' <a class="an-notes" href="#/notes/' + u.subject + '/' + u.firstTopic + '">notes</a>' : "");
+          (x.via ? '<small class="an-via">includes ' + x.via.map(function (t) { return hl(t, q); }).join("; ") + '</small>' : "");
         var subj = i === 0 ? '<td class="an-subj" rowspan="' + g.rows.length + '"><b>' + hl(g.s.name, q) + '</b><small>' + qs(subTotal) + '</small></td>' : "";
         if (recent) {
           var yrs = r.recentYears.map(function (y) { return y + (r.byYear[y] > 1 ? " (" + r.byYear[y] + ")" : ""); }).join(", ");
@@ -811,196 +807,6 @@
     }).join("");
     return '<p class="an-count">' + count + (count === 1 ? " subtopic" : " subtopics") + '</p>' +
       '<div class="table-wrap"><table class="an-table' + (recent ? " recent" : "") + '">' + head + body + '</table></div>';
-  }
-
-  // ---------- topic-wise books ----------
-  function bookTopics(id) {
-    var out = [];
-    BOOKS[id].units.forEach(function (u, ui) {
-      u.topics.forEach(function (t, ti) {
-        out.push({ unit: u, topic: t, num: (ui + 1) + "." + (ti + 1), unitNo: ui + 1 });
-      });
-    });
-    return out;
-  }
-  function bookWritten(id) { return bookTopics(id).filter(function (x) { return x.topic.html; }); }
-  function bookComplete(id) { return bookWritten(id).length === bookTopics(id).length; }
-  // Whole book for the PDF: contents, then every written unit and topic in reading order
-  function bookHtml(id) {
-    var toc = '<div class="toc"><b>Contents</b>' + BOOKS[id].units.map(function (u, ui) {
-      if (!u.topics.some(function (t) { return t.html; })) return "";
-      return '<div class="toc-unit">' + (ui + 1) + '. ' + esc(u.title) + '</div>' + u.topics.map(function (t, ti) {
-        return t.html ? '<a href="#bk-' + t.id + '">' + (ui + 1) + '.' + (ti + 1) + ' ' + esc(t.title) + '</a>' : "";
-      }).join("");
-    }).join("") + '</div>';
-    var body = BOOKS[id].units.map(function (u, ui) {
-      if (!u.topics.some(function (t) { return t.html; })) return "";
-      return '<h2 class="book-unit">' + (ui + 1) + '. ' + esc(u.title) + '</h2>' + u.topics.map(function (t, ti) {
-        return t.html ? '<h3 class="book-topic" id="bk-' + t.id + '">' + (ui + 1) + '.' + (ti + 1) + ' ' + esc(t.title) + '</h3>' +
-          '<div class="book-text">' + t.html + '</div>' : "";
-      }).join("");
-    }).join("");
-    var rest = (!bookComplete(id) && NOTES[id]) ?
-      '<h2 class="book-unit">Earlier short notes (until every topic above is written)</h2>' + oldNotesHtml(id, true) : "";
-    return '<h1>' + esc(subjectName(id)) + '</h1>' + toc + body + rest;
-  }
-
-  // One subject's notes for the PDF: the topic-wise book if there is one, otherwise the short notes
-  function notesHtml(id) {
-    if (BOOKS[id]) return bookHtml(id);
-    return oldNotesHtml(id, false);
-  }
-
-  // Short notes: title, contents and every section ("How to prepare" always last)
-  function oldNotesHtml(id, bare) {
-    var secs = NOTES[id].sections.filter(function (s) { return s.title !== "How to prepare"; })
-      .concat(NOTES[id].sections.filter(function (s) { return s.title === "How to prepare"; }));
-    var toc = '<div class="toc"><b>Contents</b>' + secs.map(function (s, i) {
-      return '<a href="#sec-' + id + '-' + i + '">' + (i + 1) + '. ' + esc(s.title) + '</a>';
-    }).join("") + '</div>';
-    var body = secs.map(function (s, i) {
-      return '<h2 id="sec-' + id + '-' + i + '">' + (i + 1) + '. ' + esc(s.title) + '</h2>' + s.html;
-    }).join("");
-    return (bare ? "" : '<h1>' + esc(subjectName(id)) + '</h1>') + toc + body;
-  }
-
-  // PDF download: renders the chosen subjects into a print-only sheet and opens the browser's
-  // print dialog, where "Save as PDF" gives a text-searchable file named after the subject.
-  function printNotes(ids) {
-    var years = QUESTIONS.map(function (q) { return q.year; });
-    var span = Math.min.apply(null, years) + "–" + Math.max.apply(null, years);
-    var single = ids.length === 1;
-    var name = single ? subjectName(ids[0]) : "All subjects";
-    var sheet = document.createElement("div");
-    sheet.id = "print-sheet";
-    sheet.className = "print-sheet";
-    sheet.innerHTML = '<div class="print-cover"><h1>UPSC ESE Paper I PYQ Notes</h1><p>' + esc(name) +
-      '</p><small>Built from every Paper I question asked in ' + span + '. Generated ' +
-      new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) + '.</small></div>' +
-      ids.map(function (id) {
-        return '<section class="notes-body print-subject">' + notesHtml(id).replace(/ id="(sec|bk)-/g, ' id="p-$1-')
-          .replace(/href="#(sec|bk)-/g, 'href="#p-$1-') + '</section>';
-      }).join("");
-    wrapTables(sheet);
-    clearPrint();
-    document.body.appendChild(sheet);
-    document.title = "UPSC ESE PYQ Notes - " + name;
-    document.body.classList.add("printing-notes");
-    window.print();
-  }
-  // The sheet is invisible on screen, so it can safely wait until printing ends or the user moves on
-  // (some mobile browsers return from print() before the PDF is made).
-  var BASE_TITLE = document.title;
-  function clearPrint() {
-    var old = document.getElementById("print-sheet");
-    if (old) old.parentNode.removeChild(old);
-    document.body.classList.remove("printing-notes");
-    document.title = BASE_TITLE;
-  }
-  window.addEventListener("afterprint", clearPrint);
-
-  var TREE_KEY = "esepyq-tree-open";
-  function treeOpen() {
-    var v = null;
-    try { v = localStorage.getItem(TREE_KEY); } catch (e) { /* ignore */ }
-    if (v === "1") return true;
-    if (v === "0") return false;
-    return !(window.matchMedia && window.matchMedia("(max-width: 700px)").matches);
-  }
-  // Side tree of units and topics for the open subject
-  function bookTree(id, topicId) {
-    return '<details class="tree-box" id="tree-box"' + (treeOpen() ? " open" : "") + '><summary>Topics</summary>' +
-      BOOKS[id].units.map(function (u, ui) {
-        var here = u.topics.some(function (t) { return t.id === topicId; });
-        return '<div class="tree-unit' + (here ? " here" : "") + '"><b>' + (ui + 1) + '. ' + esc(u.title) + '</b>' +
-          u.topics.map(function (t, ti) {
-            var label = (ui + 1) + '.' + (ti + 1) + ' ' + esc(t.title);
-            if (!t.html) return '<span class="tree-topic todo">' + label + '</span>';
-            return '<a class="tree-topic' + (t.id === topicId ? " active" : "") + '" href="#/notes/' + id + '/' + t.id + '">' + label + '</a>';
-          }).join("") + '</div>';
-      }).join("") + '</details>';
-  }
-  // Book overview (no topic), one topic, or the earlier short notes ("old"); null = redirected
-  function bookPage(id, topicId) {
-    var all = bookTopics(id), done = bookWritten(id);
-    if (!topicId) {
-      var units = BOOKS[id].units.map(function (u, ui) {
-        return '<div class="ov-unit"><h3>' + (ui + 1) + '. ' + esc(u.title) + '</h3>' + u.topics.map(function (t, ti) {
-          var label = (ui + 1) + '.' + (ti + 1) + ' ' + esc(t.title);
-          return t.html ? '<a href="#/notes/' + id + '/' + t.id + '">' + label + '</a>' : '<span class="todo">' + label + ' · being written</span>';
-        }).join("") + '</div>';
-      }).join("");
-      return '<h1>' + esc(subjectName(id)) + '</h1>' +
-        '<p class="sub">Read in order: each unit builds on the ones before it. Every concept behind every past ESE Paper I question is covered inside these topics, along with the background you need.</p>' +
-        (done.length ? '<p><a class="btn primary" href="#/notes/' + id + '/' + done[0].topic.id + '">Start reading → ' + done[0].num + ' ' + esc(done[0].topic.title) + '</a></p>' : "") +
-        (done.length < all.length ? '<p class="progress-note">' + done.length + ' of ' + all.length + ' topics written so far.' +
-          (NOTES[id] ? ' Until the rest are ready, the <a href="#/notes/' + id + '/old">earlier short notes</a> stay available.' : "") + '</p>' : "") +
-        '<div class="ov">' + units + '</div>';
-    }
-    if (topicId === "old" && NOTES[id]) {
-      return '<p class="crumb"><a href="#/notes/' + id + '">' + esc(subjectName(id)) + '</a> › Earlier short notes</p>' + oldNotesHtml(id, false);
-    }
-    var k = -1;
-    for (var i = 0; i < done.length; i++) if (done[i].topic.id === topicId) k = i;
-    if (k < 0) { go("#/notes/" + id, true); return null; }
-    var x = done[k], prev = done[k - 1], next = done[k + 1];
-    var n = 0, inToc = [];
-    var html = x.topic.html.replace(/<h3>([\s\S]*?)<\/h3>/g, function (m, title) {
-      inToc.push('<a href="#in-' + n + '">' + title + '</a>');
-      return '<h3 id="in-' + (n++) + '">' + title + '</h3>';
-    });
-    var navRow = '<div class="nav-row topic-nav">' +
-      (prev ? '<a class="btn" href="#/notes/' + id + '/' + prev.topic.id + '">← ' + prev.num + ' ' + esc(prev.topic.title) + '</a>' : '<span></span>') +
-      (next ? '<a class="btn primary" href="#/notes/' + id + '/' + next.topic.id + '">' + next.num + ' ' + esc(next.topic.title) + ' →</a>' : '<span></span>') +
-      '</div>';
-    return '<p class="crumb"><a href="#/notes/' + id + '">' + esc(subjectName(id)) + '</a> › ' + x.unitNo + '. ' + esc(x.unit.title) + '</p>' +
-      '<h1>' + x.num + ' ' + esc(x.topic.title) + '</h1>' +
-      (inToc.length > 2 ? '<div class="toc"><b>In this topic</b>' + inToc.join("") + '</div>' : "") +
-      '<div class="book-text">' + html + '</div>' + navRow;
-  }
-
-  function viewNotes(id, topicId) {
-    setTab("notes");
-    var available = SUBJECTS.filter(function (s) { return NOTES[s.id] || BOOKS[s.id]; });
-    if (!available.length) {
-      app.innerHTML = '<h1>PYQ Notes</h1><p class="empty">Notes will appear here as papers are analysed.</p>';
-      return;
-    }
-    if (!id || !(NOTES[id] || BOOKS[id])) { go("#/notes/" + available[0].id, true); return; }
-    var main;
-    if (BOOKS[id]) {
-      main = bookPage(id, topicId);
-      if (main === null) return;
-    } else {
-      main = oldNotesHtml(id, false);
-    }
-    var side = SUBJECTS.map(function (s) {
-      if (!NOTES[s.id] && !BOOKS[s.id]) return "";
-      return '<a href="#/notes/' + s.id + '" class="' + (s.id === id ? "active" : "") + '">' + esc(s.name) + '</a>' +
-        (s.id === id && BOOKS[id] ? bookTree(id, topicId) : "");
-    }).join("");
-    app.innerHTML = '<h1>PYQ Notes</h1><p class="sub">Every topic UPSC has asked, combined into one reference per subject.</p>' +
-      '<div class="pdf-bar" id="pdf-bar">' +
-      '<button class="btn primary" id="pdf-one" type="button">⬇ Download ' + esc(subjectName(id)) + ' notes (PDF)</button>' +
-      '<button class="btn" id="pdf-all" type="button">⬇ All subjects (PDF)</button></div>' +
-      '<div class="notes-layout"><nav class="notes-side" id="notes-side">' + side +
-      '</nav><article class="notes-body" id="notes-body">' + main + '</article></div>';
-    document.getElementById("pdf-one").addEventListener("click", function () { printNotes([id]); });
-    document.getElementById("pdf-all").addEventListener("click", function () {
-      printNotes(available.map(function (s) { return s.id; }));
-    });
-    var tb = document.getElementById("tree-box");
-    if (tb) tb.addEventListener("toggle", function () {
-      try { localStorage.setItem(TREE_KEY, this.open ? "1" : "0"); } catch (e) { /* ignore */ }
-    });
-    // in-page links (#sec-..., #in-...) must not fight the hash router
-    app.querySelectorAll('.notes-body a[href^="#sec-"], .notes-body a[href^="#in-"]').forEach(function (a) {
-      a.addEventListener("click", function (e) {
-        e.preventDefault();
-        var target = document.getElementById(a.getAttribute("href").slice(1));
-        if (target) target.scrollIntoView({ behavior: "smooth" });
-      });
-    });
   }
 
   // ---------- my data: everything lives in this browser's storage; a backup file protects it ----------
@@ -1199,7 +1005,6 @@
 
   function route() {
     quizKeys = null;
-    clearPrint();
     var parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
     var scrollTop = true;
     switch (parts[0]) {
@@ -1210,7 +1015,6 @@
       case "subject":
       case "unit":
       case "paper": viewQuiz(parts[0], parts[1], parts[2] === undefined ? 0 : parseInt(parts[2], 10)); scrollTop = false; break;
-      case "notes": viewNotes(parts[1], parts[2]); break;
       case "test": viewTest(parts[1], parts[2]); scrollTop = parts[1] !== "q"; break;
       case "data": viewData(); break;
       case "bookmarks": viewBookmarks(parts[1] === undefined ? 0 : parseInt(parts[1], 10)); scrollTop = false; break;
